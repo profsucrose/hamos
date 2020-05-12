@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "hamos_app.h"
+#include "../logger.h"
 
 #define TEXT_COLOR 9
 

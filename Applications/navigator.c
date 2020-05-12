@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hamos_app.h"
+#include "../logger.h"
+
+#define ENTER 10
 
 int load_dir(char* dirPath) {
     logprintf("Current path: %s \n", dirPath);

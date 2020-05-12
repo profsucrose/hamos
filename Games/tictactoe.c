@@ -1,7 +1,9 @@
 #include <ncurses.h>
 #include <stdlib.h>
 
-#include "hamos_app.h"
+#include "../logger.h"
+
+#define ENTER 10
 
 #define PLAYER 'X'
 #define BOT 'O'

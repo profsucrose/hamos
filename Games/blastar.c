@@ -4,10 +4,12 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
-
-#include "hamos_app.h"
-
 #include <errno.h>    
+
+#include "../logger.h"
+
+#define ENTER 10
+#define SPACE 32
 
 #define TEXT_COLOR 1
 #define SHIP_COLOR 2
