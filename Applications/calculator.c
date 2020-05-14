@@ -1,10 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <ncurses.h>
 
 struct Vector {
     int length;
     char *str;
 } null_vector;
+
+int yInc = 0;
 
 struct Vector inputString(size_t initial_size) {
     char *str;
@@ -13,7 +16,7 @@ struct Vector inputString(size_t initial_size) {
     str = realloc(NULL, sizeof(char) * initial_size);
 
     if (!str) return null_vector;
-    while (EOF != (ch = fgetc(stdin)) && ch != '\n') {
+    while (EOF != (ch = getch()) && ch != '\n') {
         str[len++] = ch;
         if (len * sizeof(char) > sizeof(str)) {
             str = realloc(str, (len + initial_size) * 2 * sizeof(char));
@@ -30,8 +33,10 @@ struct Vector inputString(size_t initial_size) {
     return final_input_string;
 }
 
-int main(void) {
-    printf("HamOS calculator, enter operation : ");
+void calc_prompt(void) {
+    mvprintw(yInc, 1, "Enter operation : ");
+    yInc += 1;
+    refresh();
 
     struct Vector expr_raw = inputString(10);
     int expr_size = expr_raw.length;
@@ -70,8 +75,10 @@ int main(void) {
     }
 
     if (token_count == 0) {
-        printf("ERROR: Not all operands specified\n");
-        return -1;
+        mvprintw(yInc, 1, "ERROR: Not all operands specified\n");
+        yInc += 2;
+        refresh();
+        return;
     }
 
     switch (oper) {
@@ -88,11 +95,34 @@ int main(void) {
             result = val1 * val2;
             break;
         default:
-            printf("ERROR: Operation not supported or invalid\n");
-            return -1;
+            mvprintw(yInc, 1, "ERROR: Operation not supported or invalid\n");
+            yInc += 2;
+            refresh();
+            return;
             break;
     }
 
-    printf("%i\n", result);
+    mvprintw(yInc, 1, "%i\n", result);
+    yInc += 2;
+    refresh();
     free(expr);
+    calc_prompt();
+}
+
+int main(void) {
+
+    initscr();
+    curs_set(0);
+
+    start_color();
+    
+    init_pair(1, COLOR_YELLOW, COLOR_BLACK); 
+
+    keypad(stdscr, TRUE);
+    attron(COLOR_PAIR(1) | A_BOLD);
+    clear();
+
+    mvprintw(yInc, 0, "HamOS calculator");
+    yInc += 1;
+    calc_prompt();
 }

@@ -4,19 +4,22 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "logger.h"
+#include "../logger.h"
 
-#define TEXT_COLOR 9
+
 
 #define WIDTH 10
 #define HEIGHT 20
 
-#define EMPTY 0
-#define EMPTY_COLOR 1
+enum Color {
+    EMPTY = 0,
+    EMPTY_COLOR = 0,
+    TEXT_COLOR = 9
+};
 
 #define PIECE_COUNT 7
 #define BOARD_OFFSET_Y 2
-#define BOARD_OFFSET_X 8
+#define BOARD_OFFSET_X 13
 
 char board[HEIGHT][WIDTH];
 int pieces[PIECE_COUNT][4][4] = {
@@ -66,7 +69,10 @@ int pieces[PIECE_COUNT][4][4] = {
 
 int pieceY, pieceX, pieceType, gravity, score, level, linesClearedTotal;
 int holdPieceType = -1;
-int piece[3][3];
+int moveTimeCounter = 0;
+bool holdPiece = false;
+bool didHoldPiece = false;
+int piece[4][4];
 bool skip, breakPieceLoop, didHoldPiece;
 int nextPieces[3];
 
@@ -77,17 +83,17 @@ void draw_border() {
     attron(COLOR_PAIR(1));
     // Corners
     mvaddch(BOARD_OFFSET_Y - 1, BOARD_OFFSET_X, '+');
-    mvaddch(BOARD_OFFSET_Y - 1, WIDTH + BOARD_OFFSET_X, '+');
+    mvaddch(BOARD_OFFSET_Y - 1, 2 * WIDTH + BOARD_OFFSET_X + 1, '+');
     mvaddch(HEIGHT + BOARD_OFFSET_Y - 1, BOARD_OFFSET_X, '+');
-    mvaddch(HEIGHT + BOARD_OFFSET_Y - 1, WIDTH + BOARD_OFFSET_X, '+');
+    mvaddch(HEIGHT + BOARD_OFFSET_Y - 1, 2 * WIDTH + BOARD_OFFSET_X + 1, '+');
 
     // Walls
     for (int y = 0; y < HEIGHT - 1; y++) {
         mvaddch(y + BOARD_OFFSET_Y, BOARD_OFFSET_X, '|');
-        mvaddch(y + BOARD_OFFSET_Y, WIDTH + BOARD_OFFSET_X, '|');
+        mvaddch(y + BOARD_OFFSET_Y, 2 * WIDTH + BOARD_OFFSET_X + 1, '|');
     }
 
-    for (int x = 0; x < WIDTH - 1; x++) {
+    for (int x = 0; x < 2 * WIDTH; x++) {
         mvaddch(BOARD_OFFSET_Y - 1, x + 1 + BOARD_OFFSET_X, '-');
         mvaddch(HEIGHT + BOARD_OFFSET_Y - 1, x + 1 + BOARD_OFFSET_X, '-');
     }
@@ -95,64 +101,64 @@ void draw_border() {
 
 void print_info() {
     mvprintw(0, 0, "HamOS Tetris");
-    mvprintw(2, 21, "Score %i", score);
-    mvprintw(4, 21, "Level %i", level);
+    mvprintw(2, 37, "Score %i", score);
+    mvprintw(4, 37, "Level %i", level);
 }
 
 void draw_piece_slot(int pX, int pY, int pT) {
     attron(COLOR_PAIR(1));
     mvaddch(pY, pX + 1, '+');
-    mvaddch(pY, pX + 6, '+');
+    mvaddch(pY, pX + 9, '+');
     mvaddch(pY + 5, pX + 1, '+');
-    mvaddch(pY + 5, pX + 6, '+');
+    mvaddch(pY + 5, pX + 9, '+');
 
     // Walls
     for (int y = 1; y < 5; y++) {
         mvaddch(pY + y, pX + 1, '|');
-        mvaddch(pY + y, pX + 6, '|');
+        mvaddch(pY + y, pX + 9, '|');
     }
 
-    for (int x = 1; x < 5; x++) {
-        mvaddch(pY, pX + x + 1, '-');
-        mvaddch(pY + 5, pX + x + 1, '-');
+    for (int x = 1; x < 8; x++) {
+        mvaddch(pY, x + pX + 1, '-');
+        mvaddch(pY + 5, x + pX + 1, '-');
     }
 
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
             if (pieces[pT][y][x] != EMPTY) {
                 attron(COLOR_PAIR(pT + 2));
-                mvaddch(pY + y + 1, pX + x + 2, ' ');
+                mvprintw(pY + y + 1, 2 * x + pX + 2, "  ");
             }
         }
     }
 }
 
 void draw_held_piece() {
-    mvaddch(BOARD_OFFSET_Y, 1, '+');
-    mvaddch(BOARD_OFFSET_Y, 6, '+');
-    mvaddch(BOARD_OFFSET_Y + 5, 1, '+');
-    mvaddch(BOARD_OFFSET_Y + 5, 6, '+');
+    mvaddch(BOARD_OFFSET_Y, 2, '+');
+    mvaddch(BOARD_OFFSET_Y, 10, '+');
+    mvaddch(BOARD_OFFSET_Y + 5, 2, '+');
+    mvaddch(BOARD_OFFSET_Y + 5, 10, '+');
 
     // Walls
     for (int y = 1; y < 5; y++) {
-        mvaddch(y + BOARD_OFFSET_Y, 1, '|');
-        mvaddch(y + BOARD_OFFSET_Y, 6, '|');
+        mvaddch(y + BOARD_OFFSET_Y, 2, '|');
+        mvaddch(y + BOARD_OFFSET_Y, 10, '|');
     }
 
-    for (int x = 1; x < 5; x++) {
-        mvaddch(BOARD_OFFSET_Y, x + 1, '-');
-        mvaddch(BOARD_OFFSET_Y + 5, x + 1, '-');
+    for (int x = 1; x < 8; x++) {
+        mvaddch(BOARD_OFFSET_Y, x + 2, '-');
+        mvaddch(BOARD_OFFSET_Y + 5, x + 2, '-');
     }
 
     if (holdPieceType == -1) return;
-    for (int y = 0; y < 3; y++) {
+    for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 3; x++) {
-            if (pieces[didHoldPiece + 1][y][x] != EMPTY) {
-                attron(COLOR_PAIR(didHoldPiece + 3));
-                mvaddch(BOARD_OFFSET_Y + 1 + y, x + 2, ' ');
+            if (pieces[holdPieceType][y][x] != EMPTY) {
+                attron(COLOR_PAIR(holdPieceType + 2));
+                mvprintw(BOARD_OFFSET_Y + 1 + y, 2 * x + 3, "  ");
             } else {
                 attron(COLOR_PAIR(1));
-                mvaddch(BOARD_OFFSET_Y + 1 + y, x + 2, ' ');
+                mvprintw(BOARD_OFFSET_Y + 1 + y, 2 * x + 3, "  ");
             }
         }
     }
@@ -172,32 +178,31 @@ void draw_board(void) {
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             attron(COLOR_PAIR(board[y][x] + 1));
-            mvaddch(y + BOARD_OFFSET_Y, x + 1 + BOARD_OFFSET_X, ' ');
+            mvprintw(y + BOARD_OFFSET_Y, 2 * x + 1 + BOARD_OFFSET_X, "  ");
         }
-        printw("\n");
     }
 }
 
-void set_piece(int piece[3][3], int pieceX, int pieceY) {
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
+void set_piece(int piece[4][4], int pieceX, int pieceY) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
             if (piece[y][x] != EMPTY) board[pieceY + y][pieceX + x] = piece[y][x];
         }
     }
 }
 
-void clear_piece(int piece[3][3], int pieceX, int pieceY) {
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
+void clear_piece(int piece[4][4], int pieceX, int pieceY) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
             if (piece[y][x] != EMPTY) board[pieceY + y][pieceX + x] = EMPTY;
         }
     }
 }
 
-bool check_collision(int piece[3][3], int pieceX, int pieceY) {
+bool check_collision(int piece[4][4], int pieceX, int pieceY) {
     // log_board();
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
             if (piece[y][x] != EMPTY) {
                 // logprintf("Piece pixel %i \n", piece[y][x]);
                 // logprintf("Board pixel %i \n", board[pieceY + y][pieceX + x]);
@@ -216,27 +221,27 @@ bool check_collision(int piece[3][3], int pieceX, int pieceY) {
 }
 
 void rotate_piece_clockwise() {
-    int newPiece[3][3];
-    for (int y = 0; y < 3; y++)
-        for (int x = 0; x < 3; x++) 
+    int newPiece[4][4];
+    for (int y = 0; y < 4; y++)
+        for (int x = 0; x < 4; x++) 
             newPiece[y][x] = 0;
     
     // Transpose
-    for (int y = 0; y < 3; y++) 
-        for (int x = 0; x < 3; x++) 
+    for (int y = 0; y < 4; y++) 
+        for (int x = 0; x < 4; x++) 
             newPiece[x][y] = piece[y][x];
 
     // Swap columns
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3/2; x++) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4/2; x++) {
             int tmp = newPiece[y][3 - x - 1];
             newPiece[y][3 - x - 1] = newPiece[y][x];
             newPiece[y][x] = tmp;
         }
     }
 
-    for (int y = 0; y < 3; y++) { 
-        for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 4; y++) { 
+        for (int x = 0; x < 4; x++) {
             logprintf("%i ", newPiece[y][x]);
             piece[y][x] = newPiece[y][x];
         }
@@ -245,15 +250,15 @@ void rotate_piece_clockwise() {
 }
 
 void draw_piece_slots() {
-    draw_piece_slot(20, 6, nextPieces[0]);
-    draw_piece_slot(20, 11, nextPieces[1]);
-    draw_piece_slot(20, 16, nextPieces[2]);
+    draw_piece_slot(WIDTH * 2 + BOARD_OFFSET_X + 3, 6, nextPieces[0]);
+    draw_piece_slot(WIDTH * 2 + BOARD_OFFSET_X + 3, 11, nextPieces[1]);
+    draw_piece_slot(WIDTH * 2 + BOARD_OFFSET_X + 3, 16, nextPieces[2]);
 }
 
 // Utils
 int get_left_edge() {
-    for (int x = 0; x < 3; x++) {
-        for (int y = 0; y < 3; y++) 
+    for (int x = 0; x < 4; x++) {
+        for (int y = 0; y < 4; y++) 
             if (piece[y][x] != EMPTY) return x;
     }
     return 2;
@@ -261,15 +266,15 @@ int get_left_edge() {
 
 int get_right_edge() {
     for (int x = 2; x >= 0; x--) {
-        for (int y = 0; y < 3; y++) 
+        for (int y = 0; y < 4; y++) 
             if (piece[y][x] != EMPTY) return x;
     }
     return 0;
 }
 
 int get_height() {
-    for (int y = 2; y > 0; y--) {
-        for (int x = 0; x < 3; x++)
+    for (int y = 3; y > 0; y--) {
+        for (int x = 0; x < 4; x++)
             if (piece[y][x] != EMPTY) return y + 1;
     }
     return 0;
@@ -289,7 +294,7 @@ void hard_drop() {
 }
 
 int score_formula(int lines) {
-    return (lines == 1 ? 40 : lines == 2 ? 100 : 300) * pow(2, level);
+    return (level + 1) * 2 * (lines == 1 ? 40 : lines == 2 ? 100 : lines == 3 ? 300 : lines == 4 ? 1200 : 0);
 }
 
 int get_gravity() {
@@ -297,53 +302,35 @@ int get_gravity() {
 }
 
 void clear_lines() {
-    bool linesCleared[4];
     int linesClearedCount = 0;
     // Check for full lines
     for (int y = HEIGHT - 1; y >= 0; y--) {
         bool isLineCleared = true;
-        for (int x = 0; x < WIDTH - 1; x++) 
+        for (int x = 0; x < WIDTH; x++) 
             if (board[y][x] == EMPTY) isLineCleared = false;
-        if (isLineCleared) {
-            linesCleared[linesClearedCount] = y;
-            linesClearedCount++;
-        }
-    }
 
-    // Shift lines downward if line(s) were cleared
-    if (linesClearedCount > 0) {
-        logprintf("Cleared at least one line \n", 0);
-        for (int i = 0; i < linesClearedCount; i++) {
-            logprintf("Cleared layer %i \n", HEIGHT - linesCleared[i]);
-            for (int y = HEIGHT - linesCleared[i]; y > 0; y--) {
-                for (int x = 0; x < WIDTH - 1; x++) {
-                    board[y + 1][x] = board[y][x];
-                    board[y][x] = EMPTY;
+        
+        if (isLineCleared) {
+            for (int yCopy = y - 1; yCopy > 0; yCopy--) {
+                for (int x = 0; x < WIDTH; x++) {
+                    board[yCopy + 1][x] = board[yCopy][x];
+                    board[yCopy][x] = EMPTY;
                 }
             }
+            linesClearedCount++;
+            y++;
         }
-
-        score += score_formula(linesClearedCount);
-        linesClearedTotal += linesClearedCount;
-        level = linesClearedTotal / 3;
-        print_info();
-        refresh();
     }
+
+    score += score_formula(linesClearedCount);
+    linesClearedTotal += linesClearedCount;
+    level = linesClearedTotal / 3;
+    print_info();
+    refresh();
 }
 
 void hold_piece() {
-    int tmp = holdPieceType;
-    if (holdPieceType != -1) {
-        int tmp = pieceType;
-        holdPieceType = pieceType;
-        pieceType = tmp;
-        clear_piece(piece, pieceX, pieceY);
-        for (int y = 0; y < 4; y++)
-            for (int x = 0; x < 4; x++) piece[y][x] = pieces[holdPieceType][y][x];
-    } else {
-        didHoldPiece = true;
-    }
-    holdPieceType = pieceType;
+    holdPiece = true;
 }
 
 // Input loop
@@ -357,7 +344,7 @@ void *input_loop(void *vargp) {
             if (pieceX > -get_left_edge()) pieceX--;
 
         if (ch == KEY_RIGHT)
-            if (pieceX < WIDTH - 2 - get_right_edge()) pieceX++;
+            if (pieceX < WIDTH - 1 - get_right_edge()) pieceX++;
 
         // Hacky solution to make square pieces not rotatable
         if (ch == KEY_UP && pieceType != 1) {
@@ -396,7 +383,7 @@ void *game_loop(void *vargp) {
     draw_board();
     refresh();
     
-    for (int i = 0; i < 3; i++) nextPieces[i] = rand() % PIECE_COUNT;
+    for (int i = 0; i < 4; i++) nextPieces[i] = rand() % PIECE_COUNT;
 
     while (1) {
         pieceY = 0, pieceX = 0, pieceType = nextPieces[0], gravity = get_gravity();
@@ -405,10 +392,14 @@ void *game_loop(void *vargp) {
         nextPieces[1] = nextPieces[2];
         nextPieces[2] = rand() % PIECE_COUNT;
 
-        for (int y = 0; y < 3; y++)
-            for (int x = 0; x < 3; x++) piece[y][x] = pieces[pieceType][y][x];
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++) piece[y][x] = pieces[pieceType][y][x];
         if (check_collision(piece, pieceX, pieceY)) break;
         set_piece(piece, pieceX, pieceY);
+
+        moveTimeCounter = 1;
+        didHoldPiece = false;
+        logprintf("didHoldPiece: %i \n", didHoldPiece);
         while (pieceY < HEIGHT - get_height() - 1) {
             clear();
             draw_board();
@@ -417,16 +408,33 @@ void *game_loop(void *vargp) {
             draw_held_piece();
             draw_piece_slots();
             refresh();
-            if (didHoldPiece) {
-                clear_piece(piece, pieceX, pieceY);
-                didHoldPiece = false;
-                break;
+
+            if (holdPiece && !didHoldPiece) {
+                if (holdPieceType != -1) {
+                    int tmp;
+                    tmp = pieceType;
+                    pieceType = holdPieceType;
+                    holdPieceType = tmp;
+                    clear_piece(piece, pieceX, pieceY);
+                    for (int y = 0; y < 4; y++)
+                        for (int x = 0; x < 4; x++) piece[y][x] = pieces[pieceType][y][x];
+                    pieceY = 0, pieceX = 0;
+                    holdPiece = false;
+                    didHoldPiece = true;
+                    continue;
+                } else {
+                    holdPieceType = pieceType;
+                    clear_piece(piece, pieceX, pieceY);
+                    pieceY = 0, pieceX = 0;
+                    holdPiece = false;
+                    didHoldPiece = true;
+                    break;
+                }
+                
             }
+
             msleep(gravity);
-            if (skip) {
-                gravity = get_gravity();
-                skip = false;
-            }
+            
 
             clear_piece(piece, pieceX, pieceY);
             if (check_collision(piece, pieceX, pieceY + 2)) {
@@ -434,14 +442,17 @@ void *game_loop(void *vargp) {
                 logprintf("Collision detected \n", 0);
                 break;
             }
+            
             pieceY++;
 
-            set_piece(piece, pieceX, pieceY);
+            set_piece(piece, pieceX, pieceY); 
         }
 
         clear_lines();
+
     }
     set_piece(piece, pieceX, pieceY);
+    
 
     return NULL;
 }
@@ -478,9 +489,9 @@ int main(void) {
 
     // Tetromino colors
     init_pair(2, COLOR_WHITE, COLOR_MAGENTA);
-    init_pair(3, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(3, COLOR_WHITE, COLOR_YELLOW); 
     init_pair(4, COLOR_WHITE, COLOR_GREEN);
-    init_pair(5, COLOR_WHITE, COLOR_RED);
+    init_pair(5, COLOR_WHITE, COLOR_RED); init_color(COLOR_YELLOW, 800, 800, 0);
     init_pair(6, COLOR_WHITE, COLOR_WHITE); init_color(COLOR_WHITE, 1000,500,0); // Orange
     init_pair(7, COLOR_WHITE, COLOR_CYAN);
     init_pair(8, COLOR_WHITE, COLOR_BLUE);
