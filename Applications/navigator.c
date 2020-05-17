@@ -1,124 +1,106 @@
 #include <ncurses.h>
 #include <dirent.h> 
-#include <unistd.h>
-#include <ctype.h> 
 #include <stdlib.h>
 #include <string.h>
-
-#include "../logger.h"
+#include <unistd.h>  
 
 #define ENTER 10
 
-int load_dir(char* dirPath) {
-    logprintf("Current path: %s \n", dirPath);
-    
+enum COLORS {
+    TITLE = 1,
+    ITEM = 2,
+    CURSOR = 3
+};
+
+int selectionId = 0;
+
+// Drawing
+void draw_items(char files[50][50], int fileNum) {
+    attron(COLOR_PAIR(ITEM));
+    for (int i = 0; i < fileNum; i++) {
+        if (i == selectionId)
+            attron(A_UNDERLINE);
+        mvprintw(i + 3, 4, files[i]);
+        attroff(A_UNDERLINE);
+    }
+}
+
+void draw_cursor_char(char c) {
+    attron(COLOR_PAIR(CURSOR));
+    mvaddch(selectionId + 3, 3, c);
+}
+void draw_cursor() {
+    draw_cursor_char('>');
+}
+
+void clear_cursor() {
+    draw_cursor_char(' ');
+}
+
+// Main 
+void load_dir(char* dirPath) {
+    clear();
+    attron(COLOR_PAIR(TITLE) | A_BOLD);
     if (chdir(dirPath) != 0) {
-        printw("ERROR: Could not change directory (press any key to exit)");
-        refresh();
+        mvprintw(0, 0, "ERROR: Could not change directory (press any key to exit)");
         getch();
         endwin();
+        return;
     }
 
     clear();
-    int selectionId = 0;
+    selectionId = 0;
+
     struct dirent *de;
     DIR *dir = opendir(".");
-    attron(COLOR_PAIR(1) | A_BOLD);
-
-    
 
     if (dir == NULL) {
-        printw("ERROR: Could not open current directory (press any key to exit)");
-        refresh();
+        mvprintw(0, 0, "ERROR: Could not open current directory (press any key to exit)");
         getch();
         endwin();
+        return;
     }
 
-    printw("HamOS Navigator, select file or subdirectory ('c' to exit):\n\n");
+    mvprintw(0, 0, "HamOS Navigator");
+    mvprintw(1, 0, "Select file or subdirectory ('c' to exit):");
 
-    attron(COLOR_PAIR(3));
-    printw("UP\n");
+    attron(COLOR_PAIR(ITEM) | A_NORMAL);
 
-    int listLength = 1;
-    int listCapacity = 100;
-    int* listFileLengths = realloc(NULL, listCapacity * sizeof(int));
-    listFileLengths[0] = 2;
+    char files[50][50];
+    strcpy(files[0], "UP");
+    int fileNum = 1;
     while ((de = readdir(dir)) != NULL) {
-        char* name = de->d_name;
+        char *name = de->d_name;
         if (name[0] == '.') continue;
-        listFileLengths[listLength] = strlen(name);
-        listLength++;
-        if (listLength == listCapacity) {
-            listCapacity = listCapacity * 2;
-            listFileLengths = realloc(NULL, listCapacity * sizeof(int));
-        }
-        printw("%s\n", name);
+        strcpy(files[fileNum], name);
+        fileNum++;
     }
 
-    logprintf("Finished print loop\n", "");
+    draw_items(files, fileNum);
 
-    attron(COLOR_PAIR(2));
-    mvprintw(selectionId + 2, listFileLengths[selectionId], "<");
-    curs_set(0);
-    set_background();
-    refresh();
-
-    keypad(stdscr, TRUE);
-    logprintf("Starting input loop\n", "");
-    while (1) {
-        logprintf("Waiting for char\n", "");
-        int ch = getch();
-        mvprintw(selectionId + 2, listFileLengths[selectionId], " ");
-
+    draw_cursor();
+    int ch;
+    while ((ch = getch())) {
         if (ch == 'c') {
             endwin();
-            exit(1);
+            return;
         }
 
-        if (ch == ENTER) {
-            logprintf("Enter key pressed\n", "");
-            rewinddir(dir);
-            logprintf("%s\n", dirPath);
-            char* selectedDirectoryName;
-            if (selectionId == 0) {
-                selectedDirectoryName = "..";
-            } else {
-                int iter = 1;
-                
-                while ((de = readdir(dir)) != NULL) {
-                    
-                    char* name = de->d_name;
+        if (ch == ENTER
+        && strchr(files[selectionId], '.') == NULL) 
+            break;
 
-                    if (name[0] == '.') continue;
-                    
-                    if (selectionId == iter) {
-                        selectedDirectoryName = name;
-                        break;
-                    }
-
-                    iter++;
-                }
-
-                if (strstr(selectedDirectoryName, ".") != NULL) goto skipDirLoad;              
-            }
-
-            load_dir(selectedDirectoryName);
-            skipDirLoad:;
-        }
-
-        if (ch == KEY_UP) {
-            logprintf("UP Key Pressed\n", "");
+        clear_cursor();
+        if (ch == KEY_UP)
             if (selectionId > 0) selectionId--;
-        }
-
-        if (ch == KEY_DOWN) 
-            if (selectionId < listLength - 1) selectionId++;
-
-        mvprintw(selectionId + 2, listFileLengths[selectionId], "<");
-        refresh();
+        
+        if (ch == KEY_DOWN)
+            if (selectionId < fileNum - 1) selectionId++;
+        draw_cursor();
+        draw_items(files, fileNum);
     }
 
-    endwin();
+    load_dir(selectionId == 0 ? ".." : files[selectionId]);
 }
 
 int main(void) {
@@ -128,10 +110,14 @@ int main(void) {
 
     // Initialize curses
     initscr();
+    curs_set(0);
     start_color();
-    init_pair(1, COLOR_YELLOW, COLOR_WHITE);
-    init_pair(2, COLOR_BLUE, COLOR_WHITE);
-    init_pair(3, COLOR_CYAN, COLOR_WHITE);
+    noecho();
+    keypad(stdscr, TRUE);
+
+    init_pair(TITLE, COLOR_WHITE, COLOR_BLACK);
+    init_pair(CURSOR, COLOR_WHITE, COLOR_BLACK);
+    init_pair(ITEM, COLOR_CYAN, COLOR_BLACK);
 
     load_dir(".");
 }
