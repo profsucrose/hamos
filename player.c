@@ -4,13 +4,14 @@
 
 #define ENTER 10
 #define NUMBER_OF_GAMES 6
-#define NUMBER_OF_APPLICATIONS 2
+#define NUMBER_OF_APPLICATIONS 3
 
 int cursorY = 0;
 
 char applications[NUMBER_OF_APPLICATIONS][50] = {
     "Calculator",
-    "Navigator"
+    "Navigator",
+    "Donut"
 };
 
 char games[NUMBER_OF_GAMES][50] = {
@@ -22,9 +23,10 @@ char games[NUMBER_OF_GAMES][50] = {
     "Tron"
 };
 
-char file_names[8][50] = {
+char file_names[9][50] = {
     "calculator",
     "navigator",
+    "donut",
     "blastar",
     "minesweeper",
     "snake",
@@ -110,7 +112,7 @@ int main(void) {
     sprintf(
         command, 
         "gcc %s/%s.c -lncurses -lm -lpthread && ./a.out",
-        cursorY > 1 ? "Games" : "Applications",
+        cursorY > 2 ? "Games" : "Applications",
         file_names[cursorY]
     );
 
